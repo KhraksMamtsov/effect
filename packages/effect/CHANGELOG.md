@@ -1,5 +1,11 @@
 # effect
 
+## 3.15.1
+
+### Patch Changes
+
+- [#4870](https://github.com/Effect-TS/effect/pull/4870) [`787ce70`](https://github.com/Effect-TS/effect/commit/787ce7042e35b657963473c6efe47752868cd811) Thanks @tim-smart! - ensure generic refinements work with Effect.filterOr\*
+
 ## 3.15.0
 
 ### Minor Changes
