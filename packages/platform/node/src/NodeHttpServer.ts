@@ -6,9 +6,11 @@
  * Node `listen` options, converts `request` events into `HttpServerRequest`
  * values, writes `HttpServerResponse` bodies through Node's `ServerResponse`,
  * and handles `upgrade` events by exposing the upgraded socket through
- * `HttpServerRequest.upgrade`. It also exports request and upgrade handler
- * constructors plus layers for the server alone, HTTP support services, the
- * combined server, configurable options, and tests.
+ * `HttpServerRequest.upgrade`. Importing this module augments
+ * `HttpServerRequest.source` with Node's `http.IncomingMessage`. It also
+ * exports request and upgrade handler constructors plus layers for the server
+ * alone, HTTP support services, the combined server, configurable options, and
+ * tests.
  *
  * **HTTP/2**
  *
@@ -578,6 +580,26 @@ const pendingContinue = new WeakSet<Http.IncomingMessage>()
 
 // Body bytes pulled through `stream`, shared by modified requests.
 const bodyBytesRead = new WeakMap<Http.IncomingMessage, number>()
+
+declare module "effect/http/HttpServerRequest" {
+  /**
+   * Node.js `http.IncomingMessage` carried by `HttpServerRequest.source` when this module is loaded.
+   *
+   * **When to use**
+   *
+   * Use when reading the Node request fields, such as `socket` or the raw header object, from `HttpServerRequest.source`.
+   *
+   * **Gotchas**
+   *
+   * An HTTP/2 request carries an `Http2ServerRequest` at runtime. Use `NodeHttpServerRequest.toIncomingMessage`
+   * when a handler has to tell the two apart.
+   *
+   * @stability unstable
+   * @category models
+   * @since 4.2.0
+   */
+  interface HttpServerRequestSource extends Http.IncomingMessage {}
+}
 
 class ServerRequestImpl extends NodeHttpIncomingMessage<HttpServerError> implements HttpServerRequest {
   protected override readonly destroyOnOverflow = false

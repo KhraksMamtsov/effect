@@ -23,7 +23,7 @@ import type * as Http2 from "node:http2"
  * @since 4.0.0
  */
 export const toIncomingMessage = (self: HttpServerRequest): Http.IncomingMessage | Http2.Http2ServerRequest =>
-  self.source as any
+  self.source
 
 /**
  * Returns the underlying Node `ServerResponse` for a platform Node

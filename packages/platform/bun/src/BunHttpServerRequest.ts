@@ -18,4 +18,4 @@ import type { HttpServerRequest } from "effect/http/HttpServerRequest"
  * @since 4.0.0
  */
 export const toBunServerRequest = <T extends string = string>(self: HttpServerRequest): Bun.BunRequest<T> =>
-  (self as any).source
+  self.source as Bun.BunRequest<T>

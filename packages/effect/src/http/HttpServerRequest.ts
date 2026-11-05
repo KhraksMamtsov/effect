@@ -69,13 +69,40 @@ export {
 export const TypeId = "~effect/http/HttpServerRequest"
 
 /**
+ * Platform request stored on an `HttpServerRequest`.
+ *
+ * **When to use**
+ *
+ * Use when reading the runtime request behind an Effect server request.
+ *
+ * **Details**
+ *
+ * The interface starts with no members. Importing `NodeHttpServer` from
+ * `@effect/platform-node` augments it with Node's `http.IncomingMessage`.
+ * Importing `BunHttpServer` from `@effect/platform-bun` augments it with
+ * `Bun.BunRequest`.
+ *
+ * **Gotchas**
+ *
+ * Importing both server modules into one TypeScript program merges the
+ * augmentations. Those request types have incompatible members, so
+ * `HttpServerRequest.source` then fails to type-check.
+ *
+ * @stability unstable
+ * @category models
+ * @since 4.2.0
+ */
+export interface HttpServerRequestSource {}
+
+/**
  * Server-side representation of an incoming HTTP request.
  *
  * **Details**
  *
  * It extends `HttpIncomingMessage` with request metadata, parsed cookies,
- * multipart accessors, connection upgrades, and a `modify` method for
- * creating adjusted request views. `upgrade` completes a WebSocket handshake
+ * multipart accessors, connection upgrades, the platform `source`, and a
+ * `modify` method for creating adjusted request views. `upgrade` completes a
+ * WebSocket handshake
  * for `Upgrade: websocket`. Platforms that can hand over the connection, such
  * as Node, answer other protocols with `101 Switching Protocols` and expose
  * the raw connection. `upgradeWith` does the same and adds custom headers to
@@ -88,7 +115,7 @@ export const TypeId = "~effect/http/HttpServerRequest"
  */
 export interface HttpServerRequest extends HttpIncomingMessage.HttpIncomingMessage<HttpServerError> {
   readonly [TypeId]: typeof TypeId
-  readonly source: object
+  readonly source: HttpServerRequestSource
   readonly url: string
   readonly originalUrl: string
   /**

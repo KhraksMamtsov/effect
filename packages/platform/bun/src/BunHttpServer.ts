@@ -6,7 +6,8 @@
  * `HttpServerResponse` values back into Web `Response` values. The server
  * supports streaming bodies, multipart requests, file responses through
  * `BunHttpPlatform`, and WebSocket upgrades. `Bun.serve` cannot hand over the
- * connection for other protocols, so other upgrades fail. This module also
+ * connection for other protocols, so other upgrades fail. Importing this module
+ * augments `HttpServerRequest.source` with `Bun.BunRequest`. This module also
  * provides layers for the server alone, the Bun HTTP support services, the
  * combined server, configurable server options, and a test server with an
  * HTTP client.
@@ -163,15 +164,16 @@ export const make = Effect.fnUntraced(
       listenOptions = { ...options, hostname }
     }
     const { compressionThreshold = MIN_COMPRESSIBLE_SIZE, ...websocket } = options.websocket ?? {}
-    const handlerStack: Array<(request: Request, server: BunServer<WebSocketContext>) => Response | Promise<Response>> =
-      [
-        function(_request, _server) {
-          return new Response("service unavailable", {
-            status: 503,
-            headers: { "cache-control": "no-store", "retry-after": "1" }
-          })
-        }
-      ]
+    const handlerStack: Array<
+      (request: Bun.BunRequest, server: BunServer<WebSocketContext>) => Response | Promise<Response>
+    > = [
+      function(_request, _server) {
+        return new Response("service unavailable", {
+          status: 503,
+          headers: { "cache-control": "no-store", "retry-after": "1" }
+        })
+      }
+    ]
     const server = Bun.serve<WebSocketContext, R>({
       // Opt-in; Effect timeouts bound requests and responses instead. Bun
       // applies idleTimeout to Unix sockets too, although its types omit it.
@@ -230,7 +232,7 @@ export const make = Effect.fnUntraced(
             if (upgradedSources.has(bunRequest.source)) return upgradedResponse
           }), middleware)
 
-        function handler(request: Request, server: BunServer<WebSocketContext>) {
+        function handler(request: Bun.BunRequest, server: BunServer<WebSocketContext>) {
           if (request.method === "CONNECT") {
             return Promise.resolve(new Response(null, { status: 501 }))
           }
@@ -461,10 +463,30 @@ function wsDefaultRun(this: WebSocketContext, _: Uint8Array | string) {
 
 const formDecoder = new TextDecoder("utf-8", { ignoreBOM: true })
 
+declare module "effect/http/HttpServerRequest" {
+  /**
+   * Bun `BunRequest` carried by `HttpServerRequest.source` when this module is loaded.
+   *
+   * **When to use**
+   *
+   * Use when reading Bun request fields, including `params` and `cookies`, from `HttpServerRequest.source`.
+   *
+   * **Gotchas**
+   *
+   * The augmentation uses the default route type, so `source.params` is `Record<string, string>`.
+   * `toBunServerRequest` still accepts a route pattern when a handler needs those parameter names.
+   *
+   * @stability unstable
+   * @category models
+   * @since 4.2.0
+   */
+  interface HttpServerRequestSource extends Bun.BunRequest {}
+}
+
 class BunServerRequest extends Inspectable.Class implements ServerRequest.HttpServerRequest {
   readonly [ServerRequest.TypeId]: typeof ServerRequest.TypeId
   readonly [IncomingMessage.TypeId]: typeof IncomingMessage.TypeId
-  readonly source: Request
+  readonly source: Bun.BunRequest
   public resolve: (response: Response) => void
   readonly url: string
   private bunServer: BunServer<WebSocketContext>
@@ -475,7 +497,7 @@ class BunServerRequest extends Inspectable.Class implements ServerRequest.HttpSe
   readonly protocol: "http" | "https" | undefined
 
   constructor(
-    source: Request,
+    source: Bun.BunRequest,
     resolve: (response: Response) => void,
     url: string,
     bunServer: BunServer<WebSocketContext>,
