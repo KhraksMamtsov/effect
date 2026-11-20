@@ -16,7 +16,7 @@ import {
   pipe,
   Result,
   Schedule,
-  type Scope,
+  Scope,
   type Sink,
   type Stream,
   type Types,
@@ -1612,5 +1612,48 @@ describe("Effect.track", () => {
 describe("Effect.withErrorReporting", () => {
   it("returns an Effect for an Exit input", () => {
     expect(Effect.withErrorReporting(Exit.succeed(1))).type.toBe<Effect.Effect<number>>()
+  })
+})
+
+describe("Effect.provideNamed", () => {
+  class Database extends Context.Service<Database, { readonly url: string }>()("Database") {}
+  class Other extends Context.Service<Other, { readonly url: string }>()("Other") {}
+  const program = Effect.gen(function*() {
+    yield* Effect.scope
+    return (yield* Database).url
+  })
+
+  it("replaces a requirement with a function-style named key", () => {
+    expect(program.pipe(Effect.provideNamed(Scope.Scope, Context.Named(Scope.Scope, "MyScope")))).type.toBe<
+      Effect.Effect<string, never, Database | Context.Named<Scope.Scope, "MyScope">>
+    >()
+    expect(Effect.provideNamed(program, Database, Context.Named(Database, "Primary"))).type.toBe<
+      Effect.Effect<string, never, Scope.Scope | Context.Named<Database, "Primary">>
+    >()
+  })
+
+  it("replaces a requirement with a class-style named key", () => {
+    class MyScope extends Context.Named<MyScope>()(Scope.Scope, "MyScope") {}
+
+    expect(program.pipe(Effect.provideNamed(Scope.Scope, MyScope))).type.toBe<
+      Effect.Effect<string, never, Database | MyScope>
+    >()
+  })
+
+  it("rejects named keys of another service with the same shape", () => {
+    class OtherPrimary extends Context.Named<OtherPrimary>()(Other, "Primary") {}
+
+    expect(Effect.provideNamed).type.not.toBeCallableWith(Database, Context.Named(Other, "Primary"))
+    expect(Effect.provideNamed).type.not.toBeCallableWith(Database, OtherPrimary)
+    expect(Effect.provideNamed).type.not.toBeCallableWith(Database, Other)
+  })
+
+  it("rejects keys whose identifier is never", () => {
+    const Ref = Context.Reference<{ readonly url: string }>("TestRef", { defaultValue: () => ({ url: "ref" }) })
+    const NeverKey = Context.Service<never, { readonly url: string }>("TestNever")
+
+    expect(Effect.provideNamed).type.not.toBeCallableWith(Database, Ref)
+    expect(Effect.provideNamed).type.not.toBeCallableWith(Database, NeverKey)
+    expect(Effect.provideNamed).type.not.toBeCallableWith(program, Database, Ref)
   })
 })

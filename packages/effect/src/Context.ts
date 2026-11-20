@@ -1395,3 +1395,152 @@ export const Reference: <Service>(
     readonly fiberCached?: boolean | undefined
   }
 ) => Reference<Service> = Service as any
+
+/**
+ * Identifier of a service key created by `Context.named`.
+ *
+ * **Details**
+ *
+ * `Named<Identifier, Name>` is a phantom type that records both the original
+ * service identifier and the name literal, so different named variants of the same
+ * service are tracked as separate requirements in Effect types.
+ *
+ * @see {@link Named} for creating named service keys
+ *
+ * @stability unstable
+ * @category models
+ * @since 4.0.0
+ */
+export interface Named<in out Identifier, in out Name extends string> {
+  readonly "~effect/Context/Named": {
+    readonly _Identifier: Types.Invariant<Identifier>
+    readonly _Name: Types.Invariant<Name>
+  }
+}
+
+/**
+ * Service key created by `Context.named`.
+ *
+ * **Details**
+ *
+ * `NamedKey<Of, Name, Shape, Identifier>` is a `Key<Identifier, Shape>` whose
+ * identifier is a subtype of `Named<Of, Name>`. `Identifier` defaults to
+ * `Named<Of, Name>`, the identifier of function-style keys; class-style keys
+ * use the class type, which extends `Named<Of, Name>`.
+ *
+ * @see {@link Named} for the identifier shared by all named keys
+ * @see {@link Named} for creating named service keys
+ *
+ * @stability unstable
+ * @category models
+ * @since 4.0.0
+ */
+export type NamedKey<Of, Name extends string, Shape, Identifier extends Named<Of, Name> = Named<Of, Name>> = Key<
+  Identifier,
+  Shape
+>
+
+/**
+ * Class-style service key produced by `Context.named<Self>()(service, name)`.
+ *
+ * **Details**
+ *
+ * Like `ServiceClass`, the class itself is the `Context` key. Its instance type
+ * also extends `Named<Of, Name>`, so the opaque class identifier stays related
+ * to the service it was derived from and to the variant name.
+ *
+ * @see {@link Named} for creating named service keys
+ *
+ * @stability unstable
+ * @category models
+ * @since 4.0.0
+ */
+export interface NamedServiceClass<
+  in out Self,
+  in out Of,
+  in out Name extends string,
+  in out Identifier extends string,
+  in out Shape
+> extends Service<Self, Shape> {
+  new(_: never): ServiceClass.Shape<Identifier, Shape> & Named<Of, Name>
+  readonly key: Identifier
+}
+
+/**
+ * Creates a service key for a named variant of an existing service.
+ *
+ * **When to use**
+ *
+ * Use when a program needs several instances of the same service at once, such
+ * as a primary and a replica database, and each instance should be a separate
+ * requirement.
+ *
+ * **Details**
+ *
+ * Call `Context.named(service, name)` for a function-style key with the
+ * identifier `Named<Identifier, Name>`, or use the two-stage form
+ * `Context.named<Self>()(service, name)` for a class-style key whose
+ * identifier is the opaque class type `Self`. Both forms keep the service
+ * shape of `service` and use the runtime key `` `${service.key}#${name}` ``.
+ *
+ * Services are looked up by their runtime key, so every key created for the
+ * same service and name, in either form, refers to the same slot in a
+ * `Context`. The returned key is always a required service, even when
+ * `service` is a `Reference`. In both forms the identifier is a subtype of
+ * `Named<Identifier, Name>`, so it records which service the key was derived
+ * from.
+ *
+ * **Example** (Providing two named variants of the same service)
+ *
+ * ```ts import.meta.vitest
+ * import { Context, Effect, Layer } from "effect"
+ *
+ * class Database extends Context.Service<Database, {
+ *   readonly url: string
+ * }>()("Database") {}
+ *
+ * // Function-style key
+ * const Primary = Context.named(Database, "Primary")
+ *
+ * // Class-style key with an opaque identifier
+ * class Replica extends Context.named<Replica>()(Database, "Replica") {}
+ *
+ * const program = Effect.gen(function*() {
+ *   const primary = yield* Primary
+ *   const replica = yield* Replica
+ *   return [primary.url, replica.url]
+ * })
+ *
+ * const result = program.pipe(
+ *   Effect.provide(Layer.mergeAll(
+ *     Layer.succeed(Primary)({ url: "postgres://primary" }),
+ *     Layer.succeed(Replica)({ url: "postgres://replica" })
+ *   )),
+ *   Effect.runSync
+ * )
+ * result // => ["postgres://primary", "postgres://replica"]
+ * ```
+ *
+ * @see {@link Service} for creating the base service key
+ *
+ * @stability unstable
+ * @category services
+ * @since 4.0.0
+ */
+export const Named: {
+  <Self>(): <Identifier, Shape, const ServiceKey extends string, const Name extends string>(
+    service: Key<Identifier, Shape> & { readonly key: ServiceKey },
+    name: Name
+  ) => NamedServiceClass<Self, Identifier, Name, `${ServiceKey}#${Name}`, Shape>
+  <Identifier, Shape, const Name extends string>(
+    service: Key<Identifier, Shape>,
+    name: Name
+  ): Service<Named<Identifier, Name>, Shape>
+} = function() {
+  if (arguments.length === 0) {
+    return (service: Key<any, any>, name: string) => (Service as any)()(namedKey(service, name))
+  }
+  return Service(namedKey(arguments[0], arguments[1]))
+} as any
+
+const namedKey = (service: Key<any, any>, name: string): string => `${service.key}#${name}`

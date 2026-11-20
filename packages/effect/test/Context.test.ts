@@ -1,6 +1,8 @@
 import { assertFalse, assertTrue, deepStrictEqual, strictEqual } from "@effect/vitest/utils"
 import * as Context from "effect/Context"
+import * as Effect from "effect/Effect"
 import * as Equal from "effect/Equal"
+import * as Layer from "effect/Layer"
 import * as Option from "effect/Option"
 import * as Redactable from "effect/Redactable"
 import { describe, it } from "vitest"
@@ -352,5 +354,69 @@ describe("Context", () => {
     const context = Context.makeUnsafe(map)
 
     strictEqual(context.mapUnsafe, map)
+  })
+  describe("named", () => {
+    const Database = Context.Service<{ readonly url: string }>("ContextTest/Database")
+
+    it("derives the runtime key from the service key and name", () => {
+      strictEqual(Context.Named(Database, "Primary").key, "ContextTest/Database#Primary")
+    })
+
+    it("stores named variants of the same service independently", () => {
+      const Primary = Context.Named(Database, "Primary")
+      const Replica = Context.Named(Database, "Replica")
+      const context = Context.make(Primary, { url: "primary" }).pipe(
+        Context.add(Replica, { url: "replica" }),
+        Context.add(Database, { url: "base" })
+      )
+
+      strictEqual(Context.get(context, Primary).url, "primary")
+      strictEqual(Context.get(context, Replica).url, "replica")
+      strictEqual(Context.get(context, Database).url, "base")
+    })
+
+    it("resolves services through separately created keys for the same name", () => {
+      const context = Context.make(Context.Named(Database, "Primary"), { url: "primary" })
+
+      deepStrictEqual(Context.getOption(context, Context.Named(Database, "Primary")), Option.some({ url: "primary" }))
+      assertTrue(Option.isNone(Context.getOption(context, Context.Named(Database, "Replica"))))
+    })
+
+    it("does not inherit reference defaults", () => {
+      const Ref = Context.Reference("ContextTest/NamedRef", { defaultValue: () => 1 })
+      const Named = Context.Named(Ref, "Custom")
+
+      assertFalse(Context.isReference(Named))
+      assertTrue(Option.isNone(Context.getOption(Context.empty(), Named)))
+    })
+
+    it("creates class-style keys sharing the runtime key with function-style keys", () => {
+      class Primary extends Context.Named<Primary>()(Database, "Primary") {}
+
+      strictEqual(Primary.key, "ContextTest/Database#Primary")
+      assertTrue(Context.isKey(Primary))
+
+      const context = Context.make(Primary, { url: "primary" })
+      strictEqual(Context.get(context, Primary).url, "primary")
+      deepStrictEqual(Context.getOption(context, Context.Named(Database, "Primary")), Option.some({ url: "primary" }))
+    })
+
+    it("works with layers and yield*", () => {
+      const Primary = Context.Named(Database, "Primary")
+      class Replica extends Context.Named<Replica>()(Database, "Replica") {}
+      const layerFor = <I>(tag: Context.Key<I, { readonly url: string }>, url: string) =>
+        Layer.effect(tag)(Effect.succeed({ url }))
+
+      const result = Effect.gen(function*() {
+        const primary = yield* Primary
+        const replica = yield* Replica
+        return [primary.url, replica.url]
+      }).pipe(
+        Effect.provide(Layer.mergeAll(layerFor(Primary, "primary"), layerFor(Replica, "replica"))),
+        Effect.runSync
+      )
+
+      deepStrictEqual(result, ["primary", "replica"])
+    })
   })
 })

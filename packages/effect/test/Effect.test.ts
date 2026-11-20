@@ -284,6 +284,42 @@ describe("Effect", () => {
     assert.isFalse(Effect.isEffect([0]))
   })
 
+  describe("provideNamed", () => {
+    it.effect("provides the service stored under the named key", () =>
+      Effect.gen(function*() {
+        const result = yield* ATag.useSync((a) => a).pipe(
+          Effect.provideNamed(ATag, Context.Named(ATag, "Custom")),
+          Effect.provideService(Context.Named(ATag, "Custom"), "A")
+        )
+        assert.strictEqual(result, "A")
+      }))
+
+    it.effect("supports the data-first form", () =>
+      Effect.gen(function*() {
+        const result = yield* Effect.provideNamed(ATag.useSync((a) => a), ATag, Context.Named(ATag, "Custom")).pipe(
+          Effect.provideService(Context.Named(ATag, "Custom"), "A")
+        )
+        assert.strictEqual(result, "A")
+      }))
+
+    it.effect("registers finalizers in the named scope", () =>
+      Effect.gen(function*() {
+        class MyScope extends Context.Named<MyScope>()(Scope.Scope, "MyScope") {}
+        const output: Array<string> = []
+        const scope = yield* Scope.make()
+
+        yield* Effect.addFinalizer(() => Effect.sync(() => output.push("release"))).pipe(
+          Effect.provideNamed(Scope.Scope, MyScope),
+          Effect.provideService(MyScope, scope),
+          Effect.scoped
+        )
+        assert.deepStrictEqual(output, [])
+
+        yield* Scope.close(scope, Exit.void)
+        assert.deepStrictEqual(output, ["release"])
+      }))
+  })
+
   describe("Effectable.Class", () => {
     it.effect("runs using asEffect", () =>
       Effect.gen(function*() {

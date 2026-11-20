@@ -6885,6 +6885,88 @@ export const provideServiceEffect: {
   ): Effect<A, E | E2, Exclude<R, I> | R2>
 } = internal.provideServiceEffect
 
+// `never` satisfies every constraint, so keys with a `never` identifier, such
+// as `Context.Reference`, would otherwise pass the `Named` check.
+type ProvideNamedNotNever<J> = [J] extends [never] ? {
+    readonly "~effect/Effect/provideNamed": "the named key identifier must not be never"
+  } :
+  unknown
+
+/**
+ * Moves a service requirement to a named variant of the same service.
+ *
+ * **When to use**
+ *
+ * Use when an existing effect requires a service, such as `Scope`, and that
+ * requirement should be satisfied by a named key created with
+ * `Context.named`.
+ *
+ * **Details**
+ *
+ * `provideNamed(service, namedKey)` reads the implementation stored under
+ * `namedKey` and provides it to the wrapped effect as `service`. The
+ * requirement `service` is removed and the identifier of `namedKey` is added.
+ * The wrapped effect receives the same value, not a copy, so for `Scope` its
+ * finalizers are added to the named scope.
+ *
+ * Both function-style and class-style named keys are accepted. The key must be
+ * derived from `service`: a named key of another service is rejected at
+ * compile time, even when the service shapes match.
+ *
+ * **Example** (Registering finalizers in a named scope)
+ *
+ * ```ts import.meta.vitest
+ * import { Context, Effect, Exit, Scope } from "effect"
+ *
+ * class MyScope extends Context.named<MyScope>()(Scope.Scope, "MyScope") {}
+ *
+ * const output: Array<string> = []
+ *
+ * const resource = Effect.acquireRelease(
+ *   Effect.sync(() => output.push("acquire")),
+ *   () => Effect.sync(() => output.push("release"))
+ * )
+ *
+ * const program = Effect.gen(function*() {
+ *   const scope = yield* Scope.make()
+ *   yield* resource.pipe(
+ *     Effect.provideNamed(Scope.Scope, MyScope),
+ *     Effect.provideService(MyScope, scope)
+ *   )
+ *   output.push("used")
+ *   yield* Scope.close(scope, Exit.void)
+ * })
+ *
+ * Effect.runSync(program)
+ * output // => ["acquire", "used", "release"]
+ * ```
+ *
+ * @see {@link Context.Named} for creating named service keys
+ * @see {@link provideServiceEffect} for providing a service from another effect
+ *
+ * @stability unstable
+ * @category providing services
+ * @since 4.0.0
+ */
+export const provideNamed: {
+  <I, S, J extends Context.Named<I, any>>(
+    service: Context.Key<I, S>,
+    named: Context.Key<J, S> & ProvideNamedNotNever<J>
+  ): <A, E, R>(self: Effect<A, E, R>) => Effect<A, E, Exclude<R, I> | J>
+  <A, E, R, I, S, J extends Context.Named<I, any>>(
+    self: Effect<A, E, R>,
+    service: Context.Key<I, S>,
+    named: Context.Key<J, S> & ProvideNamedNotNever<J>
+  ): Effect<A, E, Exclude<R, I> | J>
+} = dual(
+  3,
+  <A, E, R, I, S, J>(
+    self: Effect<A, E, R>,
+    service: Context.Key<I, S>,
+    named: Context.Key<J, S>
+  ): Effect<A, E, Exclude<R, I> | J> => internal.provideServiceEffect(self, service, named)
+)
+
 // -----------------------------------------------------------------------------
 // Resource management & finalization
 // -----------------------------------------------------------------------------
