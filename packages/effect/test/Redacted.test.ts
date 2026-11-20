@@ -56,4 +56,22 @@ describe("Redacted", () => {
     strictEqual(Hash.hash(Redacted.make(1)), Hash.hash(Redacted.make(1)))
     assertTrue(Hash.hash(Redacted.make(1)) !== Hash.hash(Redacted.make(2)))
   })
+
+  it("interpolate joins redacted values into one redacted string", () => {
+    const secret = Redacted.interpolate`${Redacted.make(123)}:${Redacted.make(222)}`
+    assertTrue(Equal.equals(secret, Redacted.make("123:222")))
+    strictEqual(String(secret), "<redacted>")
+    strictEqual(JSON.stringify(secret), "\"<redacted>\"")
+  })
+
+  it("interpolate converts plain values with String", () => {
+    const secret = Redacted.interpolate`user:${"ada"}:${1n}`
+    strictEqual(Redacted.value(secret), "user:ada:false:1")
+  })
+
+  it("interpolate fails when an interpolation was wiped", () => {
+    const wiped = Redacted.make("secret")
+    assertTrue(Redacted.wipeUnsafe(wiped))
+    throws(() => Redacted.interpolate`${wiped}`, new Error("Unable to get redacted value"))
+  })
 })

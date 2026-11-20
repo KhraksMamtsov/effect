@@ -4,9 +4,9 @@
  * A `Redacted<A>` shows a redacted placeholder in string, JSON, and inspection
  * output, while still storing the original value for trusted code that needs to
  * recover it. This helps reduce accidental leaks in logs and diagnostics. This
- * module includes constructors, runtime checks, value recovery, wiping of stored
- * values, and comparison helpers that avoid exposing the wrapped value at the
- * call site.
+ * module includes constructors, template interpolation, runtime checks, value
+ * recovery, wiping of stored values, and comparison helpers that avoid exposing
+ * the wrapped value at the call site.
  *
  * @stability stable
  * @since 3.3.0
@@ -320,3 +320,58 @@ export const wipeUnsafe = <T>(self: Redacted<T>): boolean => redacted.redactedRe
  */
 export const makeEquivalence = <A>(isEquivalent: Equivalence.Equivalence<A>): Equivalence.Equivalence<Redacted<A>> =>
   Equivalence.make((x, y) => isEquivalent(value(x), value(y)))
+
+type InterpolatedValue = string | number | bigint
+
+type Interpolated = InterpolatedValue | Redacted<InterpolatedValue>
+
+const interpolatedToString = (part: Interpolated): string => isRedacted(part) ? String(value(part)) : String(part)
+
+/**
+ * Builds one redacted string from a template literal.
+ *
+ * **When to use**
+ *
+ * Use to join sensitive values with surrounding text while keeping the combined
+ * result redacted in string, JSON, and inspection output.
+ *
+ * **Details**
+ *
+ * A normal template literal stringifies a `Redacted` value as `<redacted>`.
+ * This function reads each stored value instead. Every interpolation is
+ * converted with `String`, then the combined text is wrapped in a new
+ * `Redacted<string>`.
+ *
+ * **Gotchas**
+ *
+ * A wiped interpolation fails with the same error as {@link value}. The result
+ * still stores the combined string, so `Redacted.value` reveals every part.
+ *
+ * **Example** (Combining redacted values)
+ *
+ * ```ts import.meta.vitest
+ * import { Redacted } from "effect"
+ *
+ * const secret = Redacted.interpolate`${Redacted.make(123)}:${Redacted.make(222)}`
+ *
+ * String(secret) // => "<redacted>"
+ * Redacted.value(secret) // => "123:222"
+ * ```
+ *
+ * @see {@link make} for wrapping one value
+ *
+ * @stability stable
+ * @category constructors
+ * @since 4.2.0
+ */
+export const interpolate = (
+  strings: TemplateStringsArray,
+  ...parts: ReadonlyArray<Interpolated>
+): Redacted<string> => {
+  let result = ""
+  for (let i = 0; i < parts.length; i++) {
+    result += strings[i]
+    result += interpolatedToString(parts[i])
+  }
+  return make(result + strings[parts.length])
+}
